@@ -1,9 +1,14 @@
 import os
 import shutil
 import subprocess
+import sys
+from babot import __version__
 
-# Ruta de la plantilla (estructura base del proyecto)
+# Rutas globales
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template")
+MAIN_SCRIPT = os.path.join(os.getcwd(), "main.py")
+
+DEFAULT_AGENT = "babot"  # Nombre del agente base funcional
 
 def init_project(nombre_proyecto):
     """Inicializa un nuevo proyecto con la estructura base."""
@@ -14,21 +19,17 @@ def init_project(nombre_proyecto):
     try:
         # Copiar la plantilla al nuevo directorio
         shutil.copytree(TEMPLATE_PATH, nombre_proyecto)
-
-        # Copiar .env.example a .env
-        shutil.copy(os.path.join(nombre_proyecto, ".env.example"), os.path.join(nombre_proyecto, ".env"))
-
+        # shutil.copy(os.path.join(nombre_proyecto, ".env.example"), os.path.join(nombre_proyecto, ".env"))
         print(f"Proyecto '{nombre_proyecto}' creado exitosamente.")
         print("Estructura inicial generada. Instala las dependencias con:")
         print(f"\n  cd {nombre_proyecto} && pip install -r requirements.txt")
         print("\nEjecuta el agente Babot con:")
-        print(f"\n  babot run babot")
+        print(f"\n  babot run")
     except Exception as e:
         print(f"Error al crear el proyecto: {e}")
 
-
 def create_agent(nombre_agente):
-    """Crea un nuevo agente dentro del proyecto actual."""
+    """Crea un nuevo agente basado en el agente 'babot'."""
     agentes_dir = "agentes"
     config_dir = "config"
 
@@ -43,66 +44,49 @@ def create_agent(nombre_agente):
         print(f"El agente '{nombre_agente}' ya existe.")
         return
 
-    # Crear plantilla del agente Python
-    plantilla_py = f"""
-        from langchain_ollama import OllamaLLM
-        from rich.console import Console
-        from config import Config
-
-        console = Console()
-
-        # Configurar el modelo Ollama
-        llm = OllamaLLM(model=Config.OLLAMA_MODEL, base_url=Config.OLLAMA_BASE_URL)
-
-        def ejecutar():
-            console.rule("[bold blue]Agente {nombre_agente.capitalize()}[/bold blue]")
-            # Lógica del agente aquí
-            console.print("[bold green]¡Agente ejecutado exitosamente![/bold green]")
-
-        if __name__ == "__main__":
-            ejecutar()
-    """
-    
-
-    # Crear plantilla YAML
-    plantilla_yaml = {
-        "descripcion": f"Agente {nombre_agente.capitalize()} generado automáticamente.",
-        "parametros": {}
-    }
-
     try:
-        with open(archivo_py, "w") as py_file:
-            py_file.write(plantilla_py.strip())
-
-        with open(archivo_yaml, "w") as yaml_file:
-            import yaml
-            yaml.dump(plantilla_yaml, yaml_file, default_flow_style=False, sort_keys=False)
-
-        print(f"Agente '{nombre_agente}' creado exitosamente.")
+        # Copiar archivo base de código y configuración
+        shutil.copy(os.path.join(agentes_dir, f"{DEFAULT_AGENT}.py"), archivo_py)
+        shutil.copy(os.path.join(config_dir, f"{DEFAULT_AGENT}.yaml"), archivo_yaml)
+        print(f"Agente '{nombre_agente}' creado exitosamente basado en '{DEFAULT_AGENT}'.")
     except Exception as e:
         print(f"Error al crear el agente: {e}")
 
 def run_agent(nombre_agente):
-    """Ejecuta un agente existente."""
+    """Ejecuta un agente existente en una nueva ventana."""
     archivo_py = os.path.join("agentes", f"{nombre_agente}.py")
     if not os.path.exists(archivo_py):
         print(f"El agente '{nombre_agente}' no existe.")
         return
 
     try:
-        # Agregar el directorio raíz al PYTHONPATH
-        import sys
-        sys.path.insert(0, os.getcwd())
-
-        # Usar `python -m` para ejecutar el agente como módulo
-        subprocess.run(["python", "-m", f"agentes.{nombre_agente}"])
+        # Ejecutar en una nueva ventana
+        if os.name == "nt":  # Windows
+            subprocess.Popen(["start", "python", archivo_py], shell=True)
+        else:  # Linux/Mac
+            subprocess.Popen(["x-terminal-emulator", "-e", f"python {archivo_py}"])
+        print(f"Ejecutando agente '{nombre_agente}' en una nueva ventana.")
     except Exception as e:
         print(f"Error al ejecutar el agente: {e}")
 
+def run_menu():
+    """Ejecuta el menú principal (main.py)."""
+    if not os.path.exists(MAIN_SCRIPT):
+        print("El archivo main.py no fue encontrado. Verifica la instalación.")
+        return
+
+    try:
+        subprocess.run([sys.executable, MAIN_SCRIPT])
+    except Exception as e:
+        print(f"Error al ejecutar el menú principal: {e}")
+
 def main():
     import argparse
-
+    
     parser = argparse.ArgumentParser(description="Babot CLI")
+    parser.add_argument("--version", action="version", version=f"Babot {__version__}")
+
+
     subparsers = parser.add_subparsers(dest="command", help="Comandos disponibles")
 
     # Comando init
@@ -114,8 +98,8 @@ def main():
     parser_create.add_argument("nombre_agente", help="Nombre del agente")
 
     # Comando run
-    parser_run = subparsers.add_parser("run", help="Ejecuta un agente existente")
-    parser_run.add_argument("nombre_agente", help="Nombre del agente")
+    parser_run = subparsers.add_parser("run", help="Ejecuta un agente o abre el menú principal")
+    parser_run.add_argument("nombre_agente", nargs="?", default=None, help="Nombre del agente (opcional)")
 
     args = parser.parse_args()
 
@@ -124,6 +108,10 @@ def main():
     elif args.command == "create":
         create_agent(args.nombre_agente)
     elif args.command == "run":
-        run_agent(args.nombre_agente)
+        if args.nombre_agente:
+            run_agent(args.nombre_agente)
+        else:
+            run_menu()
     else:
         parser.print_help()
+

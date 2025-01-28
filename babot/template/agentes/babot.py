@@ -1,8 +1,14 @@
+
+import yaml
+import os
+import sys
+
+# Asegúrate de que el directorio raíz esté en el PYTHONPATH
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from langchain_ollama import OllamaLLM
 from rich.console import Console
 from config_base import Config
-import yaml
-import os
 
 console = Console()
 
@@ -14,11 +20,21 @@ llm = OllamaLLM(
     top_p=Config.OLLAMA_TOP_P,
 )
 
+# Ruta base del proyecto
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Cargar la configuración del YAML
 def cargar_configuracion(nombre_agente):
-    ruta_config = os.path.join("config", f"{nombre_agente}.yaml")
-    with open(ruta_config, "r", encoding="utf-8") as file:
-        return yaml.safe_load(file)
+    ruta_config = os.path.join(BASE_DIR,"..","config", f"{nombre_agente}.yaml")
+    if not os.path.exists(ruta_config):
+        console.print(f"[bold red]El archivo de configuración '{ruta_config}' no existe.[/bold red]")
+        return {}
+    try:
+        with open(ruta_config, "r", encoding="utf-8") as file:
+            return yaml.safe_load(file)
+    except yaml.YAMLError as e:
+        console.print(f"[bold red]Error al cargar el archivo YAML: {e}[/bold red]")
+        return {}
 
 # Limpiar etiquetas <think>
 def limpiar_respuesta(respuesta):
@@ -30,8 +46,12 @@ def chat():
 
     # Cargar configuración del YAML
     config_babot = cargar_configuracion("babot")
-    prompt_inicial = config_babot.get("prompt_inicial", "")
-    console.print(f"[bold yellow]Prompt inicial cargado:[/bold yellow] {prompt_inicial}\n")
+    if not config_babot:
+        console.print("[bold red]No se pudo cargar la configuración del agente.[/bold red]")
+        return
+
+    prompt_inicial = config_babot.get("prompt_inicial", "Hola, soy Babot. ¿En qué puedo ayudarte?")
+    # console.print(f"[bold yellow]Prompt inicial cargado:[/bold yellow] {prompt_inicial}\n")
 
     # Inicia el chat
     while True:
@@ -47,6 +67,7 @@ def chat():
             console.print(f"[bold yellow]Babot:[/bold yellow] {clean_response}")
         except Exception as e:
             console.print(f"[bold red]Error al procesar tu mensaje: {e}[/bold red]")
+            continue  # Permitir al usuario seguir interactuando
 
 if __name__ == "__main__":
     chat()

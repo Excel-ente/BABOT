@@ -1,120 +1,122 @@
 import os
-import shutil
 import subprocess
+from ui import show_menu, show_agents, prompt_input, show_message
 
-# Ruta de la plantilla (estructura base del proyecto)
+AGENTS_DIR = "agentes"
+CONFIG_DIR = "config"
+CONFIG_BASE = "config_base.py"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template")
+
 
 def init_project(nombre_proyecto):
     """Inicializa un nuevo proyecto con la estructura base."""
     if os.path.exists(nombre_proyecto):
-        print(f"El directorio '{nombre_proyecto}' ya existe. Por favor, elige otro nombre.")
+        show_message(f"El directorio '{nombre_proyecto}' ya existe. Por favor, elige otro nombre.", "red")
         return
-
     try:
-        # Copiar la plantilla al nuevo directorio
         shutil.copytree(TEMPLATE_PATH, nombre_proyecto)
-
-        # Copiar .env.example a .env
         shutil.copy(os.path.join(nombre_proyecto, ".env.example"), os.path.join(nombre_proyecto, ".env"))
-
-        print(f"Proyecto '{nombre_proyecto}' creado exitosamente.")
-        print("Estructura inicial generada. Instala las dependencias con:")
-        print(f"\n  cd {nombre_proyecto} && pip install -r requirements.txt")
+        show_message(f"Proyecto '{nombre_proyecto}' creado exitosamente.")
     except Exception as e:
-        print(f"Error al crear el proyecto: {e}")
+        show_message(f"Error al crear el proyecto: {e}", "red")
 
-def create_agent(nombre_agente):
-    """Crea un nuevo agente dentro del proyecto actual."""
-    agentes_dir = "agentes"
-    config_dir = "config"
 
-    if not os.path.exists(agentes_dir) or not os.path.exists(config_dir):
-        print("Parece que no estás dentro de un proyecto válido. Usa 'babot init' primero.")
+def list_agents():
+    """Lista los agentes disponibles."""
+    if not os.path.exists(AGENTS_DIR):
+        os.makedirs(AGENTS_DIR)
+    return [f.replace(".py", "") for f in os.listdir(AGENTS_DIR) if f.endswith(".py")]
+
+
+def run_agent():
+    """Muestra agentes disponibles y permite ejecutarlos o modificarlos."""
+    agents = list_agents()
+    if not agents:
+        show_message("No hay agentes disponibles para ejecutar.", "red")
         return
+    show_agents(agents)
+
+    choice = prompt_input("Selecciona un agente para ejecutar o modificar")
+    if not choice.isdigit() or int(choice) < 1 or int(choice) > len(agents):
+        show_message("Selección inválida.", "red")
+        return
+
+    agent_name = agents[int(choice) - 1]
+    action = prompt_input(f"¿Qué deseas hacer con '{agent_name}'? (1: Ejecutar, 2: Modificar configuración)")
+    if action == "1":
+        agent_path = os.path.join(AGENTS_DIR, f"{agent_name}.py")
+        try:
+            subprocess.run(["python", agent_path])
+        except Exception as e:
+            show_message(f"Error al ejecutar el agente: {e}", "red")
+    elif action == "2":
+        modify_agent_config(agent_name)
+
+
+def create_agent():
+    """Crea un nuevo agente."""
+    nombre_agente = prompt_input("Nombre del nuevo agente")
+    agentes_dir = AGENTS_DIR
+    config_dir = CONFIG_DIR
 
     archivo_py = os.path.join(agentes_dir, f"{nombre_agente}.py")
     archivo_yaml = os.path.join(config_dir, f"{nombre_agente}.yaml")
 
     if os.path.exists(archivo_py) or os.path.exists(archivo_yaml):
-        print(f"El agente '{nombre_agente}' ya existe.")
+        show_message(f"El agente '{nombre_agente}' ya existe.", "red")
         return
 
-    # Crear plantilla del agente Python
-    plantilla_py = f"""
-from langchain_ollama import OllamaLLM
-from rich.console import Console
-from config import Config
-
-console = Console()
-
-# Configurar el modelo Ollama
-llm = OllamaLLM(model=Config.OLLAMA_MODEL, base_url=Config.OLLAMA_BASE_URL)
-
-def ejecutar():
-    console.rule("[bold blue]Agente {nombre_agente.capitalize()}[/bold blue]")
-    # Lógica del agente aquí
-    console.print("[bold green]¡Agente ejecutado exitosamente![/bold green]")
-
-if __name__ == "__main__":
-    ejecutar()
-    """
-
-    # Crear plantilla YAML
-    plantilla_yaml = {
-        "descripcion": f"Agente {nombre_agente.capitalize()} generado automáticamente.",
-        "parametros": {}
-    }
-
     try:
+        # Genera el archivo .py y su configuración
         with open(archivo_py, "w") as py_file:
-            py_file.write(plantilla_py.strip())
-
+            py_file.write(f"# Agente {nombre_agente.capitalize()} generado automáticamente\n")
         with open(archivo_yaml, "w") as yaml_file:
-            import yaml
-            yaml.dump(plantilla_yaml, yaml_file, default_flow_style=False, sort_keys=False)
-
-        print(f"Agente '{nombre_agente}' creado exitosamente.")
+            yaml_file.write(f"# Configuración para {nombre_agente}\n")
+        show_message(f"Agente '{nombre_agente}' creado exitosamente.")
     except Exception as e:
-        print(f"Error al crear el agente: {e}")
+        show_message(f"Error al crear el agente: {e}", "red")
 
-def run_agent(nombre_agente):
-    """Ejecuta un agente existente."""
-    archivo_py = os.path.join("agentes", f"{nombre_agente}.py")
-    if not os.path.exists(archivo_py):
-        print(f"El agente '{nombre_agente}' no existe.")
+
+def modify_agent_config(agent_name=None):
+    """Modifica la configuración de un agente existente."""
+    if not agent_name:
+        agents = list_agents()
+        if not agents:
+            show_message("No hay agentes disponibles para modificar.", "red")
+            return
+        show_agents(agents)
+        choice = prompt_input("Selecciona un agente para modificar")
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(agents):
+            show_message("Selección inválida.", "red")
+            return
+        agent_name = agents[int(choice) - 1]
+
+    config_path = os.path.join(CONFIG_DIR, f"{agent_name}.yaml")
+    if not os.path.exists(config_path):
+        show_message(f"La configuración del agente '{agent_name}' no existe.", "red")
         return
 
-    try:
-        subprocess.run(["python", archivo_py])
-    except Exception as e:
-        print(f"Error al ejecutar el agente: {e}")
+    os.system(f"notepad {config_path}" if os.name == "nt" else f"nano {config_path}")
+    show_message(f"Configuración de '{agent_name}' modificada.")
+
+
+def configure_general_settings():
+    """Modifica configuraciones generales."""
+    os.system(f"notepad {CONFIG_BASE}" if os.name == "nt" else f"nano {CONFIG_BASE}")
+    show_message("Configuraciones generales actualizadas.")
+
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Babot CLI")
-    subparsers = parser.add_subparsers(dest="command", help="Comandos disponibles")
-
-    # Comando init
-    parser_init = subparsers.add_parser("init", help="Inicializa un nuevo proyecto")
-    parser_init.add_argument("nombre_proyecto", help="Nombre del proyecto")
-
-    # Comando create
-    parser_create = subparsers.add_parser("create", help="Crea un nuevo agente")
-    parser_create.add_argument("nombre_agente", help="Nombre del agente")
-
-    # Comando run
-    parser_run = subparsers.add_parser("run", help="Ejecuta un agente existente")
-    parser_run.add_argument("nombre_agente", help="Nombre del agente")
-
-    args = parser.parse_args()
-
-    if args.command == "init":
-        init_project(args.nombre_proyecto)
-    elif args.command == "create":
-        create_agent(args.nombre_agente)
-    elif args.command == "run":
-        run_agent(args.nombre_agente)
-    else:
-        parser.print_help()
+    while True:
+        choice = show_menu()
+        if choice == "1":
+            run_agent()
+        elif choice == "2":
+            modify_agent_config()
+        elif choice == "3":
+            create_agent()
+        elif choice == "4":
+            configure_general_settings()
+        elif choice == "0":
+            show_message("Saliendo del programa. ¡Hasta pronto!", "yellow")
+            break
